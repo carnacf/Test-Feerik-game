@@ -375,6 +375,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   nbThreads: 2
+  txt: {fileID: 4900000, guid: cf1c361b7fd2c3244b604202a8072150, type: 3}
 --- !u!4 &1492232367
 Transform:
   m_ObjectHideFlags: 0

@@ -1,66 +1,93 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
-using UnityEngine;
+using System.Text.RegularExpressions;
+using System.Net;
 using System.IO;
+using UnityEngine;
+
 
 public class Manager_script : MonoBehaviour {
 
 	[Range(1,10)]
 	public int nbThreads;
-	private string tex_folder = "./Assets/_Textures/";
-	private string tex_txt = "./Assets/textures.txt";
-	private HashSet<string> to_download;
+	public TextAsset txt;
+	private string tex_folder;
+
+	private List<string> tex_list;
+	private Dictionary<string,byte[]> to_load;
+	private string [] tex_url;
 
 	// Use this for initialization
-	IEnumerator Start () {
-		to_download = new HashSet<string> ();
-		string [] tex_url = System.IO.File.ReadAllLines (tex_txt);
-		List<Transform> need_tex = new List<Transform>(GameObject.Find ("Need_tex").GetComponentsInChildren<Transform>());
-		for (int i = 0; i < need_tex.Count; i++) {
-			if (need_tex [i] == GameObject.Find ("Need_tex").transform) {
-				//Exctract parent object
-				need_tex.RemoveAt (i);
-			}
+	void Start () {
+		ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
 
-			if (!File.Exists(tex_folder+need_tex [i].GetComponent<Object_script> ().tex_name)) {
-				string url = findName (tex_url, need_tex [i].GetComponent<Object_script> ().tex_name);
-				if (url != "") {
-					//If tex not dowload and url found add it to List
-					Debug.Log("Add into to_dowload : " + url);
-					to_download.Add (url);
+		tex_folder = Application.persistentDataPath + "/Textures/";
+		Debug.Log (tex_folder);
+		tex_list = new List<string> ();
+		to_load = new Dictionary<string,byte[]> ();
+		tex_url = Regex.Split(txt.text,"\n|\r");
+		Debug.Log (tex_url.Length);
+
+		List<Transform> need_tex = new List<Transform>(GameObject.Find ("Need_tex").GetComponentsInChildren<Transform>());
+
+		for (int i = 0; i < need_tex.Count; i++) {
+			if (need_tex [i] != GameObject.Find ("Need_tex").transform) {
+				if (!tex_list.Contains (need_tex [i].GetComponent<Object_script> ().tex_name)) {
+					tex_list.Add (need_tex [i].GetComponent<Object_script> ().tex_name);
 				}
 			}
 		}
 
-		foreach (string s in to_download) {
-			using (WWW img = new WWW (s)) {
-				yield return img;
-				Debug.Log("Dowload : " + s);
-				byte[] raw_img = img.bytes;
-				File.WriteAllBytes (tex_folder + getFileNameInUrl(s),raw_img);
-			}
+		//Start download and save thread
+		Thread[] threads = new Thread[nbThreads];
+		for(int i = 0;i<nbThreads;i++) {
+			int start = i * tex_list.Count / nbThreads;
+			int end = (i+1) * tex_list.Count / nbThreads;
+			threads[i] = new Thread(()=>loadThread(start,end));
+			threads [i].Start ();
 		}
 
-		//Start threading
-		for(int i = 0;i<nbThreads;i++){
-			int start = i * need_tex.Count / nbThreads;
-			int end = (i+1) * need_tex.Count / nbThreads;
-			StartCoroutine(LoadAllTex(start,end,need_tex,tex_folder));
+		for(int i = 0;i<nbThreads;i++) {
+			threads [i].Join ();
+		}
+		//End
+
+
+		for (int i = 0; i < need_tex.Count; i++) {
+			if (need_tex [i] != GameObject.Find ("Need_tex").transform) {
+				Texture2D tex = new Texture2D (1,1);
+				tex.LoadImage (to_load[need_tex[i].GetComponent<Object_script> ().tex_name]);
+				need_tex[i].GetComponent<Renderer> ().material.mainTexture = tex;
+			}
 		}
 	}
 
-	IEnumerator LoadAllTex(int start,int end, List<Transform> need_tex,string tex_folder){
-		for(int i = start;i<end;i++){
-			loadTexture (need_tex[i],tex_folder);
-			yield return null;
+
+	void loadThread(int start, int end){
+		Debug.Log (start + " " + end);
+		for (int i = start; i < end; i++) {
+			byte[] raw_img;
+			//If texture already load in Dictionary do nothing
+			if (!to_load.ContainsKey (tex_list [i])) {
+				if (!File.Exists (tex_folder + tex_list [i])) {
+					string url = findName (tex_url, tex_list [i]);
+					if (url != "") {
+						raw_img = new System.Net.WebClient ().DownloadData (url);
+						to_load.Add (tex_list [i], raw_img);
+						File.WriteAllBytes (tex_folder + tex_list [i], raw_img);
+					}
+				} 
+			}else {
+				raw_img = File.ReadAllBytes(tex_folder + tex_list[i]);
+				to_load.Add (tex_list [i], raw_img);
+			}
 		}
 	}
 
 	void loadTexture(Transform go,string tex_folder){
 		string path = tex_folder + go.gameObject.GetComponent<Object_script> ().tex_name;
 		if (File.Exists (path)) {
-			Debug.Log("load : " + path);
 			byte[] raw_tex = File.ReadAllBytes(path);
 			Texture2D tex = new Texture2D (1,1);
 			tex.LoadImage (raw_tex);
@@ -70,8 +97,12 @@ public class Manager_script : MonoBehaviour {
 
 	string findName(string[] all_url,string file_name){
 		for (int i = 0; i < all_url.Length; i++) {
-			if (getFileNameInUrl (all_url [i]) == file_name)
+			if (getFileNameInUrl (all_url [i]) == file_name) {
+				Debug.Log ("find : " + all_url [i]);
 				return all_url [i];
+			}
+				
+				
 				
 		}
 		return "";
