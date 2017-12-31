@@ -21,6 +21,7 @@ Le script "Manager_script" fonctionne de la sorte :
   Il lance ensuite autant de threads que paramétré dans l'éditeur. Chaque thread va parcourir une partie de la liste des textures à charger.
   Si cette texture n'est pas présente sur le stockage local alors le thread la télécharge et la sauvegarde dans le bon dossier.
   Ensuite le thread va ajouter à une table de hashage, s'il n'y est pas déja, le tableau d'octets de la texture avec comme clef son nom.
+  Pour finir le thread ajoute dans une pile le nom de la texture à charger.
   
-  Une fois l'exécution des threads terminée, le script parcours tous les GameObject ayant besoin d'une texture et leurs applique la bonne texture
-  en la récupérant dans la table de hashage.
+  Une fois l'exécution des threads terminée, le script boucle tant que la pile n'est pas vide et que tous les threads ne sont pas finis.
+  Il récupère le nom des textures à charger et les gameobjects concerné (lecture dans le dictionnaire). Il s'occupe ensuite d'appliquer les textures.
